@@ -3,8 +3,8 @@ package com.teuportal.core.bootstrap;
 import jakarta.annotation.PostConstruct;
 
 import java.sql.PreparedStatement;
-import java.sql.Statement;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -41,52 +41,38 @@ public class SingleCompanyBootstrapper {
             return;
         }
 
-        UUID companyId = jdbcTemplate.execute((ConnectionCallback<UUID>) connection -> {
-            boolean originalAutoCommit = connection.getAutoCommit();
+        UUID created = jdbcTemplate.execute((ConnectionCallback<UUID>) connection -> {
+            boolean previousAutoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            UUID newId = UUID.randomUUID();
             try {
-                if (originalAutoCommit) {
-                    connection.setAutoCommit(false);
-                }
-
                 try (Statement statement = connection.createStatement()) {
-                    statement.execute("SET LOCAL app.company_id = '" + companyIdPlaceholder() + "'");
+                    statement.execute("SET LOCAL app.company_id = '" + newId + "'");
                     statement.execute("SET LOCAL app.user_id = ''");
                 }
-
-                int inserted;
                 try (PreparedStatement insert = connection.prepareStatement(
                         "INSERT INTO company (id, name, slug, is_active) VALUES (?, ?, ?, true)")) {
-                    UUID newId = UUID.randomUUID();
                     insert.setObject(1, newId);
                     insert.setString(2, defaultName);
                     insert.setString(3, defaultSlug);
-                    inserted = insert.executeUpdate();
-                    if (inserted > 0) {
-                        try (Statement statement = connection.createStatement()) {
-                            statement.execute("SET LOCAL app.company_id = '" + newId + "'");
-                        }
-                        try (PreparedStatement settingsInsert = connection.prepareStatement(
-                                "INSERT INTO settings (company_id, configured, preferences) VALUES (?, false, '{}'::jsonb)")) {
-                            settingsInsert.setObject(1, newId);
-                            settingsInsert.executeUpdate();
-                        }
-                        connection.commit();
-                        return newId;
-                    }
+                    insert.executeUpdate();
                 }
-                connection.rollback();
-                return null;
+                try (PreparedStatement settingsInsert = connection.prepareStatement(
+                        "INSERT INTO settings (company_id, configured, preferences) VALUES (?, false, '{}'::jsonb)")) {
+                    settingsInsert.setObject(1, newId);
+                    settingsInsert.executeUpdate();
+                }
+                connection.commit();
+                return newId;
             } catch (SQLException ex) {
                 connection.rollback();
                 throw ex;
             } finally {
-                if (originalAutoCommit) {
-                    connection.setAutoCommit(true);
-                }
+                connection.setAutoCommit(previousAutoCommit);
             }
         });
 
-        UUID resolved = companyId != null ? companyId : fetchExistingCompanyId();
+        UUID resolved = created != null ? created : fetchExistingCompanyId();
         if (resolved == null) {
             throw new IllegalStateException("Failed to bootstrap single company row");
         }
@@ -94,11 +80,9 @@ public class SingleCompanyBootstrapper {
     }
 
     private UUID fetchExistingCompanyId() {
-        return jdbcTemplate.query("SELECT app.first_company_id()", rs -> rs.next() ? rs.getObject(1, java.util.UUID.class) : null);
-    }
-
-    private String companyIdPlaceholder() {
-        UUID candidate = fetchExistingCompanyId();
-        return candidate == null ? UUID.randomUUID().toString() : candidate.toString();
+        return jdbcTemplate.query(
+                "SELECT id FROM company WHERE is_active = true ORDER BY created_at ASC LIMIT 1",
+                rs -> rs.next() ? rs.getObject(1, java.util.UUID.class) : null
+        );
     }
 }
