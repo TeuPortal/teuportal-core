@@ -4,7 +4,7 @@ Code-first tenant-aware portal skeleton. The Spring Boot API defines the contrac
 
 ## Repository layout
 
-- `apps/core-api-spring` – Spring Boot 3 (Maven) API, Flyway migrations, session security.
+- pps/core-api-spring\r\n- Tenant context filter sets SET LOCAL app.company_id/pp.user_id per request so Postgres RLS stays enforced. – Spring Boot 3 (Maven) API, Flyway migrations, session security.
 - `apps/core-web` – Nuxt 3 SSR shell wired for session cookies.
 - `packages/*` – TypeScript workspaces (client generation, config, feature flags, UI tokens).
 
@@ -16,7 +16,7 @@ Code-first tenant-aware portal skeleton. The Spring Boot API defines the contrac
 
 ## Environment variables
 
-`apps/core-api-spring`
+pps/core-api-spring\r\n- Tenant context filter sets SET LOCAL app.company_id/pp.user_id per request so Postgres RLS stays enforced.
 - `SPRING_DATASOURCE_URL`
 - `SPRING_DATASOURCE_USERNAME`
 - `SPRING_DATASOURCE_PASSWORD`
@@ -43,3 +43,4 @@ Examples live in each app's `.env.example`.
 Swagger UI is available at `http://localhost:8080/swagger-ui.html`; `/health` remains anonymously accessible.
 
 OpenAPI JSON is emitted under `apps/core-api-spring/target` (`springdoc-openapi`). A follow-up script will translate it into the `packages/contracts-client` package for the Nuxt app.
+

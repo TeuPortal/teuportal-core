@@ -13,6 +13,7 @@ public class SecurityConfig {
 
     private static final String[] PUBLIC_ENDPOINTS = {
             "/health",
+            "/health/db",
             "/swagger-ui.html",
             "/swagger-ui/**",
             "/v3/api-docs/**",
@@ -39,3 +40,4 @@ public class SecurityConfig {
         return http.build();
     }
 }
+
