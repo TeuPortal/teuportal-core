@@ -1,0 +1,33 @@
+# Core API (Spring Boot)
+
+Code-first REST API backed by Postgres, Flyway migrations, Spring Session JDBC, and SpringDoc OpenAPI.
+
+## Configure
+
+Copy `.env.example` to `.env` (or export the variables in PowerShell) before starting the service. Use environment variables for `SPRING_DATASOURCE_*`, or copy `config/api-local.example.properties` to `config/api-local.properties` so the API can read the same keys from disk when env vars are absent.
+
+Flyway SQL migrations live under `src/main/resources/db/migration`. Two placeholder migrations (`V1__baseline_schema.sql`, `V2__rls_bootstrap.sql`) are in place so Flyway runs successfully until the real schema arrives.
+
+## Run locally
+
+```powershell
+cd apps/core-api-spring
+# optional: set environment variables inline before the command
+./mvnw spring-boot:run
+```
+
+The application runs on port 8080 by default, applies Flyway on startup, and provisions Spring Session JDBC tables automatically (`spring.session.jdbc.initialize-schema=always`).
+
+- Health probe: `GET http://localhost:8080/health`
+- Swagger UI: `http://localhost:8080/swagger-ui.html`
+- OpenAPI JSON: `http://localhost:8080/v3/api-docs`
+
+Actuator health/info endpoints remain accessible for unauthenticated probes. All other routes require a session (authentication flows arrive later).
+
+## Next steps
+
+- Implement real Flyway migrations for the tenant schema.
+- Add middleware to set `app.company_id`/`app.user_id` via `SET LOCAL` within request transactions.
+- Generate the TypeScript client (`packages/contracts-client`) from the OpenAPI artifact in `target/`.
+
+

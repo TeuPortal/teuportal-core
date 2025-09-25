@@ -1,0 +1,2 @@
+-- Row Level Security bootstrap placeholder
+-- TODO: Enable RLS and create policies scoped by app.company_id/app.user_id settings.

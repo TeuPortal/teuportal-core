@@ -1,0 +1,2 @@
+-- Baseline tenant schema placeholder
+-- TODO: Define initial tables for Company, CompanyUser, and support structures.

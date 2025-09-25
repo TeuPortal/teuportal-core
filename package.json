@@ -1,0 +1,9 @@
+{
+    "name":  "teuportal-core",
+    "private":  true,
+    "packageManager":  "pnpm@8.15.4",
+    "scripts":  {
+                    "dev:web":  "pnpm -C apps/core-web dev",
+                    "build:web":  "pnpm -C apps/core-web build"
+                }
+}

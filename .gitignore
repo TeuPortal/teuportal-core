@@ -1,0 +1,26 @@
+# Node
+node_modules/
+.pnpm-store/
+*.log
+
+# Env files
+.env
+.env.local
+
+# Nuxt
+.apps/core-web/.output
+apps/core-web/.nuxt
+apps/core-web/.nitro
+apps/core-web/.cache
+
+# Java
+**/target/
+**/.classpath
+**/.project
+**/.settings/
+
+# IDE
+.idea/
+.vscode/
+.DS_Store
+apps/core-api-spring/config/api-local.properties
