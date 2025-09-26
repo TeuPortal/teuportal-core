@@ -3,6 +3,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE SCHEMA IF NOT EXISTS app;
 
+-- Expose tenancy GUC helpers so RLS can read request context
 CREATE OR REPLACE FUNCTION app.current_company_id()
 RETURNS uuid
 LANGUAGE plpgsql
@@ -33,6 +34,7 @@ BEGIN
 END;
 $$;
 
+-- Primary tenant objects: company + membership roster
 CREATE TABLE company (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     name text NOT NULL,
@@ -58,6 +60,7 @@ CREATE TABLE company_user (
 CREATE UNIQUE INDEX ux_company_user_company_email ON company_user (company_id, lower(email));
 CREATE INDEX idx_company_user_company_role ON company_user (company_id, role);
 
+-- External clients and their user accounts
 CREATE TABLE client (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id uuid NOT NULL REFERENCES company (id) ON DELETE CASCADE,
@@ -82,6 +85,7 @@ CREATE TABLE client_user (
 CREATE UNIQUE INDEX ux_client_user_company_client_email ON client_user (company_id, client_id, lower(email));
 CREATE INDEX idx_client_user_company_client ON client_user (company_id, client_id);
 
+-- Content tree: folders/files + sharing metadata
 CREATE TABLE folder (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id uuid NOT NULL REFERENCES company (id) ON DELETE CASCADE,
@@ -127,6 +131,7 @@ CREATE UNIQUE INDEX ux_file_share_company_token ON file_share (company_id, token
 CREATE INDEX idx_file_share_company_file ON file_share (company_id, file_id);
 CREATE INDEX idx_file_share_company_expires ON file_share (company_id, expires_at);
 
+-- Audit trail + tenant-scoped settings
 CREATE TABLE audit_event (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id uuid NOT NULL REFERENCES company (id) ON DELETE CASCADE,
@@ -150,6 +155,7 @@ CREATE TABLE settings (
     updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Magic-link auth tokens (global scope)
 CREATE TABLE login_token (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     nonce text NOT NULL,
@@ -187,7 +193,7 @@ CREATE TABLE spring_session_attributes (
 );
 
 
-
+-- Convenience helpers used elsewhere in migrations
 CREATE OR REPLACE FUNCTION app.first_company_id()
 RETURNS uuid
 LANGUAGE sql
