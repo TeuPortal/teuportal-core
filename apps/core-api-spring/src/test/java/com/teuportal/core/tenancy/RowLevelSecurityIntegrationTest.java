@@ -80,16 +80,13 @@ class RowLevelSecurityIntegrationTest {
         CompanyContext companyA = insertCompanyWithContext("Company A", "company-a");
         CompanyContext companyB = insertCompanyWithContext("Company B", "company-b");
 
-        insertClient(companyA, companyA.companyId(), "Client A");
+        UUID clientA = insertClient(companyA, companyA.companyId(), "Client A");
         insertClient(companyB, companyB.companyId(), "Client B");
 
         List<String> clientsForA = selectClientNames(companyA);
         List<String> clientsForB = selectClientNames(companyB);
-        List<String> clientsWithoutContext = selectClientNamesWithoutContext();
-
         Assertions.assertEquals(List.of("Client A"), clientsForA, "tenant A should only see its rows");
         Assertions.assertEquals(List.of("Client B"), clientsForB, "tenant B should only see its rows");
-        Assertions.assertTrue(clientsWithoutContext.isEmpty(), "missing context should yield no rows");
     }
 
     @Test
@@ -98,9 +95,44 @@ class RowLevelSecurityIntegrationTest {
         CompanyContext companyB = insertCompanyWithContext("Company B", "company-b");
 
         insertClient(companyA, companyA.companyId(), "Client A");
+        insertClient(companyB, companyB.companyId(), "Client B");
 
-        PSQLException exception = Assertions.assertThrows(PSQLException.class, () -> insertClient(companyA, companyB.companyId(), "Client B"));
-        Assertions.assertTrue(exception.getMessage().toLowerCase().contains("policy"), "write should be blocked by RLS");
+        List<String> expectedClientsForB = selectClientNames(companyB);
+
+        Assertions.assertTrue(executeExpectingPsqlException(() -> insertClient(companyA, companyB.companyId(), "Intruder")),
+                "cross-tenant insert should raise a PSQLException");
+        Assertions.assertEquals(expectedClientsForB, selectClientNames(companyB),
+                "cross-tenant insert should not mutate target tenant data");
+
+        executeExpectingPsqlException(() -> updateClientName(companyA, companyB.companyId(), "Client B", "Hacked"));
+        Assertions.assertEquals(expectedClientsForB, selectClientNames(companyB),
+                "cross-tenant update should leave target tenant data unchanged");
+    }
+
+    @Test
+    void shouldRejectCrossTenantDeletes() throws Exception {
+        CompanyContext companyA = insertCompanyWithContext("Company A", "company-a");
+        CompanyContext companyB = insertCompanyWithContext("Company B", "company-b");
+
+        UUID clientB = insertClient(companyB, companyB.companyId(), "Client B");
+        List<String> expectedClientsForB = selectClientNames(companyB);
+
+        executeExpectingPsqlException(() -> deleteClient(companyA, clientB));
+        Assertions.assertEquals(expectedClientsForB, selectClientNames(companyB),
+                "cross-tenant delete should leave target tenant data unchanged");
+    }
+
+    @Test
+    void shouldRejectQueriesWithoutContext() throws Exception {
+        CompanyContext company = insertCompanyWithContext("Company", "company");
+        insertClient(company, company.companyId(), "Client");
+
+        Assertions.assertThrows(PSQLException.class, () -> {
+            try (Connection connection = dataSource.getConnection();
+                 PreparedStatement ps = connection.prepareStatement("SELECT name FROM client")) {
+                ps.executeQuery();
+            }
+        });
     }
 
     private CompanyContext insertCompanyWithContext(String name, String slug) throws SQLException {
@@ -108,6 +140,10 @@ class RowLevelSecurityIntegrationTest {
         UUID ownerId = UUID.randomUUID();
         try (Connection connection = DriverManager.getConnection(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())) {
             connection.setAutoCommit(false);
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("SET LOCAL app.company_id = '" + companyId + "'");
+                statement.execute("SET LOCAL app.user_id = '" + ownerId + "'");
+            }
             try (PreparedStatement ps = connection.prepareStatement(
                     "INSERT INTO company (id, name, slug, is_active) VALUES (?, ?, ?, true)")) {
                 ps.setObject(1, companyId);
@@ -133,13 +169,36 @@ class RowLevelSecurityIntegrationTest {
         return new CompanyContext(companyId, ownerId);
     }
 
-    private void insertClient(CompanyContext context, UUID targetCompanyId, String name) throws SQLException {
+    private UUID insertClient(CompanyContext context, UUID targetCompanyId, String name) throws SQLException {
+        UUID clientId = UUID.randomUUID();
         withCompanyContext(context.companyId(), context.ownerId(), connection -> {
             try (PreparedStatement ps = connection.prepareStatement(
                     "INSERT INTO client (id, company_id, name, created_at, updated_at) VALUES (?, ?, ?, now(), now())")) {
-                ps.setObject(1, UUID.randomUUID());
+                ps.setObject(1, clientId);
                 ps.setObject(2, targetCompanyId);
                 ps.setString(3, name);
+                ps.executeUpdate();
+            }
+        });
+        return clientId;
+    }
+
+    private void updateClientName(CompanyContext context, UUID targetCompanyId, String targetName, String newName) throws SQLException {
+        withCompanyContext(context.companyId(), context.ownerId(), connection -> {
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "UPDATE client SET name = ?, updated_at = now() WHERE company_id = ? AND name = ?")) {
+                ps.setString(1, newName);
+                ps.setObject(2, targetCompanyId);
+                ps.setString(3, targetName);
+                ps.executeUpdate();
+            }
+        });
+    }
+
+    private void deleteClient(CompanyContext context, UUID clientId) throws SQLException {
+        withCompanyContext(context.companyId(), context.ownerId(), connection -> {
+            try (PreparedStatement ps = connection.prepareStatement("DELETE FROM client WHERE id = ?")) {
+                ps.setObject(1, clientId);
                 ps.executeUpdate();
             }
         });
@@ -159,20 +218,15 @@ class RowLevelSecurityIntegrationTest {
         return results;
     }
 
-    private List<String> selectClientNamesWithoutContext() throws SQLException {
-        List<String> results = new ArrayList<>();
-        try (Connection connection = dataSource.getConnection();
-             PreparedStatement ps = connection.prepareStatement("SELECT name FROM client ORDER BY name")) {
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    results.add(rs.getString(1));
-                }
-            }
-        } catch (PSQLException ignored) {
-            // RLS should reject when no company context is set
+    private boolean executeExpectingPsqlException(SqlRunnable operation) throws SQLException {
+        try {
+            operation.run();
+            return false;
+        } catch (PSQLException ex) {
+            return true;
         }
-        return results;
     }
+
 
     private void withCompanyContext(UUID companyId, UUID userId, SqlConsumer consumer) throws SQLException {
         try (Connection connection = dataSource.getConnection()) {
@@ -180,12 +234,16 @@ class RowLevelSecurityIntegrationTest {
             connection.setAutoCommit(false);
             try (Statement statement = connection.createStatement()) {
                 statement.execute("SET LOCAL app.company_id = '" + companyId + "'");
-                statement.execute("SET LOCAL app.user_id = '" + userId + "'");
+                if (userId != null) {
+                    statement.execute("SET LOCAL app.user_id = '" + userId + "'");
+                } else {
+                    statement.execute("SET LOCAL app.user_id = ''");
+                }
             }
             try {
                 consumer.accept(connection);
                 connection.commit();
-            } catch (SQLException ex) {
+            } catch (SQLException | RuntimeException ex) {
                 connection.rollback();
                 throw ex;
             } finally {
@@ -213,5 +271,10 @@ class RowLevelSecurityIntegrationTest {
     @FunctionalInterface
     interface SqlConsumer {
         void accept(Connection connection) throws SQLException;
+    }
+
+    @FunctionalInterface
+    interface SqlRunnable {
+        void run() throws SQLException;
     }
 }
