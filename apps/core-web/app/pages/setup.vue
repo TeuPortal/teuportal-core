@@ -66,7 +66,7 @@
               <UButton to="/app" size="lg" color="primary">
                 Go to dashboard
               </UButton>
-              <UButton variant="ghost" color="gray" to="/login">
+              <UButton variant="ghost" color="primary" to="/login">
                 Back to sign in
               </UButton>
             </div>
@@ -131,7 +131,7 @@ export default defineComponent({
         title: 'Setup complete',
         description: 'Your workspace is ready. Continue to the dashboard to start inviting your team.',
         icon: 'i-heroicons-check-circle',
-        color: 'green'
+        color: 'success'
       })
     }
   }

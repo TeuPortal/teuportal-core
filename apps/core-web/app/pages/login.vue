@@ -45,7 +45,7 @@
               v-for="provider in oauthProviders"
               :key="provider.name"
               block
-              color="gray"
+              color="primary"
               variant="soft"
               size="lg"
               :aria-label="`Sign in with ${provider.name}`"
@@ -139,7 +139,7 @@ export default defineComponent({
           title: 'Request failed',
           description: message,
           icon: 'i-heroicons-exclamation-triangle',
-          color: 'red'
+          color: 'error'
         })
       } finally {
         this.isSubmitting = false

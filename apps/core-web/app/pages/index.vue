@@ -22,7 +22,7 @@
       <template #header>
         <div class="flex items-center justify-between">
           <span class="font-medium">Live health probe</span>
-          <UBadge color="gray" variant="soft">{{ apiBase }}/health</UBadge>
+          <UBadge color="primary" variant="soft">{{ apiBase }}/health</UBadge>
         </div>
       </template>
       <div class="space-y-2 text-sm text-gray-700">
