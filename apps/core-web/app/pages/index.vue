@@ -1,18 +1,4 @@
-<script setup lang="ts">
-const config = useRuntimeConfig()
-const apiBase = computed(() => `${config.public.apiBase}`.replace(/\/$/, ''))
-
-const {
-  data: health,
-  pending: healthPending,
-  error: healthError
-} = await useFetch(() => `${apiBase.value}/health`, {
-  credentials: 'include',
-  key: 'health-check'
-})
-</script>
-
-<template>
+ï»¿<template>
   <section class="space-y-6">
     <div class="space-y-2">
       <h1 class="text-3xl font-semibold">{{ config.public.appName }}</h1>
@@ -41,7 +27,7 @@ const {
       </template>
       <div class="space-y-2 text-sm text-gray-700">
         <template v-if="healthPending">
-          <span>Checking service health…</span>
+          <span>Checking service health.</span>
         </template>
         <template v-else-if="healthError">
           <span class="text-red-600">Failed: {{ healthError.message }}</span>
@@ -54,3 +40,57 @@ const {
     </UCard>
   </section>
 </template>
+
+
+<script lang="ts">
+import { defineNuxtComponent, useRuntimeConfig } from '#imports'
+import { $fetch } from 'ofetch'
+
+interface HealthPayload {
+  status?: string
+  [key: string]: unknown
+}
+
+export default defineNuxtComponent({
+  data() {
+    const config = useRuntimeConfig()
+
+    return {
+      config,
+      health: null as HealthPayload | null,
+      healthPending: true,
+      healthError: null as Error | null
+    }
+  },
+  computed: {
+    apiBase(): string {
+      return `${this.config.public.apiBase}`.replace(/\/$/, '')
+    }
+  },
+  methods: {
+    async loadHealth() {
+      this.healthPending = true
+      this.healthError = null
+
+      try {
+        this.health = await $fetch<HealthPayload>(`${this.apiBase}/health`, {
+          credentials: 'include'
+        })
+      } catch (error: unknown) {
+        this.health = null
+        this.healthError = error instanceof Error ? error : new Error('Health check failed')
+      } finally {
+        this.healthPending = false
+      }
+    }
+  },
+  serverPrefetch() {
+    return this.loadHealth()
+  },
+  mounted() {
+    if (!this.health && !this.healthError) {
+      this.loadHealth()
+    }
+  }
+})
+</script>

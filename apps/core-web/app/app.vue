@@ -1,7 +1,10 @@
 <template>
-  <div class="min-h-screen bg-gray-50 text-gray-900">
-    <main class="max-w-5xl mx-auto py-8 px-4">
+  <UApp>
+    <div class="min-h-screen bg-slate-100 text-gray-900">
+      <NuxtLoadingIndicator />
+      <NuxtLayout>
       <NuxtPage />
-    </main>
-  </div>
+      </NuxtLayout>
+    </div>
+  </UApp>
 </template>
