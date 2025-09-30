@@ -48,6 +48,7 @@ import { $fetch } from 'ofetch'
 
 interface HealthPayload {
   status?: string
+  timestamp?: string
   [key: string]: unknown
 }
 
@@ -77,6 +78,7 @@ export default defineNuxtComponent({
           credentials: 'include'
         })
       } catch (error: unknown) {
+        console.error('Health check failed', error)
         this.health = null
         this.healthError = error instanceof Error ? error : new Error('Health check failed')
       } finally {

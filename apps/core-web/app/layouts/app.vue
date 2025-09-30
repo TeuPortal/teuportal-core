@@ -40,7 +40,7 @@
 
         <UDashboardSearch :groups="groups" />
 
-        <RouterView />
+        <NuxtPage />
 
         <NotificationsSlideover />
       </UDashboardGroup>
@@ -80,7 +80,7 @@ export default defineNuxtComponent({
       }
 
       const primary: NavigationMenuItem[] = [
-        {
+        /*{
           label: 'Home',
           icon: 'i-lucide-house',
           to: '/',
@@ -128,7 +128,7 @@ export default defineNuxtComponent({
               onSelect: closeSidebar
             }
           ]
-        }
+        }*/
       ]
 
       const secondary: NavigationMenuItem[] = [
@@ -176,3 +176,4 @@ export default defineNuxtComponent({
   }
 })
 </script>
+

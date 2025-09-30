@@ -1,7 +1,17 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed, ref, watchEffect } from 'vue'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import { useColorMode } from '@vueuse/core'
+import { useAppConfig, useRouter, useRuntimeConfig, useState } from '#imports'
+import { $fetch } from 'ofetch'
+
+interface SessionState {
+  userId: string
+  email: string
+  name: string
+  roles: string[]
+  companyId: string
+}
 
 defineProps<{
   collapsed?: boolean
@@ -9,17 +19,83 @@ defineProps<{
 
 const colorMode = useColorMode()
 const appConfig = useAppConfig()
+const router = useRouter()
+const config = useRuntimeConfig()
+const apiBase = (config.public?.apiBase ?? '/api').replace(/\/$/, '')
+const sessionState = useState<SessionState | null>('session', () => null)
+const isLoggingOut = ref(false)
 
 const colors = ['red', 'orange', 'amber', 'yellow', 'lime', 'green', 'emerald', 'teal', 'cyan', 'sky', 'blue', 'indigo', 'violet', 'purple', 'fuchsia', 'pink', 'rose']
 const neutrals = ['slate', 'gray', 'zinc', 'neutral', 'stone']
 
+const DEFAULT_USER_NAME = 'Signed in user'
+const DEFAULT_USER_EMAIL = ''
+
+const buildAvatar = (displayName: string, email: string) => {
+  const base = (displayName || email || 'User').trim()
+  const initials = base
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(segment => segment[0]?.toUpperCase() ?? '')
+    .join('')
+    .slice(0, 2)
+  return {
+    alt: base,
+    text: initials || base[0]?.toUpperCase() || 'U'
+  }
+}
+
+const resetUser = () => {
+  user.value = {
+    name: DEFAULT_USER_NAME,
+    email: DEFAULT_USER_EMAIL,
+    avatar: buildAvatar(DEFAULT_USER_NAME, DEFAULT_USER_EMAIL)
+  }
+}
+
 const user = ref({
-  name: 'Benjamin Canac',
-  avatar: {
-    src: 'https://github.com/benjamincanac.png',
-    alt: 'Benjamin Canac'
+  name: DEFAULT_USER_NAME,
+  email: DEFAULT_USER_EMAIL,
+  avatar: buildAvatar(DEFAULT_USER_NAME, DEFAULT_USER_EMAIL)
+})
+
+watchEffect(() => {
+  const current = sessionState.value
+  if (!current) {
+    resetUser()
+    return
+  }
+
+  const displayName = current.name?.trim() || current.email
+  user.value = {
+    name: displayName,
+    email: current.email,
+    avatar: buildAvatar(displayName, current.email)
   }
 })
+
+const handleLogout = async () => {
+  if (isLoggingOut.value) {
+    return
+  }
+
+  isLoggingOut.value = true
+  try {
+    await $fetch(`${apiBase}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        Accept: 'application/json'
+      }
+    })
+    sessionState.value = null
+    await router.replace('/login')
+  } catch (error) {
+    console.error('Failed to log out', error)
+  } finally {
+    isLoggingOut.value = false
+  }
+}
 
 const items = computed<DropdownMenuItem[][]>(() => ([[{
   type: 'label',
@@ -52,9 +128,8 @@ const items = computed<DropdownMenuItem[][]>(() => ([[{
       slot: 'chip',
       checked: appConfig.ui.colors.primary === color,
       type: 'checkbox',
-      onSelect: (e) => {
-        e.preventDefault()
-
+      onSelect: (event) => {
+        event.preventDefault()
         appConfig.ui.colors.primary = color
       }
     }))
@@ -72,9 +147,8 @@ const items = computed<DropdownMenuItem[][]>(() => ([[{
       slot: 'chip',
       type: 'checkbox',
       checked: appConfig.ui.colors.neutral === color,
-      onSelect: (e) => {
-        e.preventDefault()
-
+      onSelect: (event) => {
+        event.preventDefault()
         appConfig.ui.colors.neutral = color
       }
     }))
@@ -87,9 +161,8 @@ const items = computed<DropdownMenuItem[][]>(() => ([[{
     icon: 'i-lucide-sun',
     type: 'checkbox',
     checked: colorMode.value === 'light',
-    onSelect(e: Event) {
-      e.preventDefault()
-
+    onSelect(event: Event) {
+      event.preventDefault()
       colorMode.value = 'light'
     }
   }, {
@@ -102,8 +175,8 @@ const items = computed<DropdownMenuItem[][]>(() => ([[{
         colorMode.value = 'dark'
       }
     },
-    onSelect(e: Event) {
-      e.preventDefault()
+    onSelect(event: Event) {
+      event.preventDefault()
     }
   }]
 }], [{
@@ -118,7 +191,12 @@ const items = computed<DropdownMenuItem[][]>(() => ([[{
   target: '_blank'
 }], [{
   label: 'Log out',
-  icon: 'i-lucide-log-out'
+  icon: 'i-lucide-log-out',
+  disabled: isLoggingOut.value,
+  onSelect: async (event: Event) => {
+    event.preventDefault()
+    await handleLogout()
+  }
 }]]))
 </script>
 

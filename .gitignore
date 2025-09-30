@@ -25,4 +25,5 @@ apps/core-web/.cache
 .DS_Store
 apps/core-api-spring/config/api-local.properties
 apps/core-web/AGENTS.md
+
 pnpm-lock.yaml

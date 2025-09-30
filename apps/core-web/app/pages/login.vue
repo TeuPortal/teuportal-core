@@ -43,19 +43,19 @@
           <div class="grid gap-3">
             <UButton
               v-for="provider in oauthProviders"
-              :key="provider.name"
+              :key="provider.registrationId"
               block
               color="primary"
               variant="soft"
               size="lg"
-              :aria-label="`Sign in with ${provider.name}`"
+              :aria-label="`Sign in with ${provider.label}`"
               :disabled="isSubmitting"
               @click="handleProviderClick(provider)"
             >
               <template #leading>
                 <UIcon :name="provider.icon" class="text-xl" aria-hidden="true" />
               </template>
-              Continue with {{ provider.name }}
+              Continue with {{ provider.label }}
             </UButton>
           </div>
         </UCard>
@@ -70,6 +70,62 @@
 <script lang="ts">
 import { defineComponent } from 'vue'
 import { useRuntimeConfig, useNuxtApp, useToast, definePageMeta } from '#imports'
+import { $fetch } from 'ofetch'
+
+type OAuthProvider = {
+  label: string
+  icon: string
+  registrationId: string
+  authorizationUrl: string
+}
+
+type RuntimeOAuthEntry = OAuthProvider | string
+
+type RuntimeOAuthConfig = Array<RuntimeOAuthEntry> | undefined
+
+const normalizeProviders = (providers: RuntimeOAuthConfig, apiBase: string): OAuthProvider[] => {
+  if (!providers || providers.length === 0) {
+    return [
+      {
+        label: 'Google',
+        icon: 'i-logos-google-icon',
+        registrationId: 'google',
+        authorizationUrl: `${apiBase}/oauth2/authorization/google`
+      }
+    ]
+  }
+
+  return providers.map((entry) => {
+    if (typeof entry === 'string') {
+      return {
+        label: entry.replace(/^[a-z]/, (match) => match.toUpperCase()),
+        icon: inferIcon(entry),
+        registrationId: entry,
+        authorizationUrl: `${apiBase}/oauth2/authorization/${entry}`
+      }
+    }
+
+    const registrationId = entry.registrationId || entry.label.toLowerCase()
+    return {
+      label: entry.label,
+      icon: entry.icon || inferIcon(registrationId),
+      registrationId,
+      authorizationUrl: entry.authorizationUrl || `${apiBase}/oauth2/authorization/${registrationId}`
+    }
+  })
+}
+
+const inferIcon = (registrationId: string): string => {
+  switch (registrationId) {
+    case 'google':
+      return 'i-logos-google-icon'
+    case 'microsoft':
+    case 'azure':
+      return 'i-logos-microsoft-icon'
+    default:
+      return 'i-heroicons-user-circle'
+  }
+}
 
 export default defineComponent({
   name: 'LoginPage',
@@ -79,12 +135,14 @@ export default defineComponent({
     })
     const toast = useToast()
     const config = useRuntimeConfig()
-    //const { $fetch } = useNuxtApp()
+    const apiBase = (config.public?.apiBase ?? '/api').replace(/\/$/, '')
+    const providers = normalizeProviders(config.public?.oauthProviders as RuntimeOAuthConfig, apiBase)
+
     return {
-      toast: toast,
+      toast,
       addToast: toast.add,
-      apiBase: (config.public?.apiBase ?? '/api').replace(/\/$/, ''),
-      //$fetch
+      apiBase,
+      oauthProviders: providers
     }
   },
   data() {
@@ -95,11 +153,7 @@ export default defineComponent({
       errors: {
         email: undefined as string | undefined
       },
-      isSubmitting: false,
-      oauthProviders: [
-        { name: 'Google', icon: 'i-logos-google-icon', registrationId: 'google' },
-        { name: 'Microsoft', icon: 'i-logos-microsoft-icon', registrationId: 'microsoft' }
-      ]
+      isSubmitting: false
     }
   },
   methods: {
@@ -113,27 +167,32 @@ export default defineComponent({
       return undefined
     },
     async handleSubmit() {
-      console.log('Submitting', this.formState)
-      this.errors.email = this.validateEmail(this.formState.email)
+      const trimmedEmail = this.formState.email.trim()
+      this.errors.email = this.validateEmail(trimmedEmail)
       if (this.errors.email) {
         return
       }
-      console.log('Validated, submitting...')
 
+      this.formState.email = trimmedEmail
       this.isSubmitting = true
       try {
-        /*await this.$fetch(`${this.apiBase}/auth/magic-link`, {
+        const response = await $fetch<{ message?: string }>(`${this.apiBase}/auth/email`, {
           method: 'POST',
-          body: { email: this.formState.email },
-          credentials: 'include'
-        })*/
+          body: { email: trimmedEmail },
+          credentials: 'include',
+          headers: {
+            Accept: 'application/json'
+          }
+        })
+        const successMessage = response?.message ?? 'If the email exists, we have sent a sign-in link.'
         this.toast.add({
-          title: 'Success',
-          description: 'Your action was completed successfully.',
+          title: 'Check your email',
+          description: successMessage,
           color: 'success'
         })
-        console.log('Submitted');
+        this.formState.email = ''
       } catch (error: any) {
+        console.error('Error during login request:', error)
         const message = error?.data?.message ?? 'Unable to send the magic link right now.'
         this.addToast({
           title: 'Request failed',
@@ -145,13 +204,10 @@ export default defineComponent({
         this.isSubmitting = false
       }
     },
-    handleProviderClick(provider: { name: string; registrationId: string }) {
-      window.location.href = `${this.apiBase}/oauth2/authorization/${provider.registrationId}`
+    handleProviderClick(provider: OAuthProvider) {
+      this.isSubmitting = true
+      window.location.href = provider.authorizationUrl
     }
   }
 })
 </script>
-
-
-
-

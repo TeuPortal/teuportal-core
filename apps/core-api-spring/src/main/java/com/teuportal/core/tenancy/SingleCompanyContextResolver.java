@@ -8,10 +8,12 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
+@DependsOn("singleCompanyBootstrapper")
 public class SingleCompanyContextResolver implements CompanyContextResolver {
 
     private static final Logger log = LoggerFactory.getLogger(SingleCompanyContextResolver.class);
@@ -44,4 +46,3 @@ public class SingleCompanyContextResolver implements CompanyContextResolver {
         return cachedCompanyId;
     }
 }
-
